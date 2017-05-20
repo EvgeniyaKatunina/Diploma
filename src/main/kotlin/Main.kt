@@ -9,7 +9,7 @@ data class OrderPoint(val id: Int, val x: Int, val y: Int, val d: Int, val r: In
 
 data class CarParameters(val number: Int, val capacity: Int)
 
-fun findMaxXY(): Pair<Int, Int> =
+fun findXYCharacteristics(f: (List<Int>) -> Int): Pair<Int, Int> =
         File("datasets").walkTopDown().toList().filter { it.isFile }.flatMap { file ->
             val lines = file.readLines().drop(9)
             lines.map {
@@ -17,23 +17,12 @@ fun findMaxXY(): Pair<Int, Int> =
                 x to y
             }
         }.let { pairs ->
-            pairs.map { (x, _) -> x }.max()!! to pairs.map { (_, y) -> y }.max()!!
-        }
-
-fun findMinXY(): Pair<Int, Int> =
-        File("datasets").walkTopDown().toList().filter { it.isFile }.flatMap { file ->
-            val lines = file.readLines().drop(9)
-            lines.map {
-                val (x, y) = it.split("\\s+".toRegex()).drop(2).map(String::toInt)
-                x to y
-            }
-        }.let { pairs ->
-            pairs.map { (x, _) -> x }.min()!! to pairs.map { (_, y) -> y }.min()!!
+            f(pairs.map { (x, _) -> x }) to f(pairs.map { (_, y) -> y })
         }
 
 fun main(args: Array<String>) {
-    val (maxX, maxY) = findMaxXY()
-    val (minX, minY) = findMinXY()
+    val (maxX, maxY) = findXYCharacteristics { it.max()!! }
+    val (minX, minY) = findXYCharacteristics { it.min()!! }
     val line = File("datasets/homberger_200_customer_instances/C1_2_1.TXT").readLines()[4]
     val (number, capacity) = line.split("\\s+".toRegex()).drop(1).map(String::toInt)
     val carParameters = CarParameters(number, capacity)
@@ -59,35 +48,31 @@ fun main(args: Array<String>) {
 
 fun normalizePoints(orderPoints: List<OrderPoint>, newAreaWidth: Int, newAreaHeight: Int):
         List<OrderPoint>{
-    val pointsAreaWidth = orderPoints.map { it.x }.max()!! - orderPoints.map { it.x }.min()!!
-    val pointsAreaHeight = orderPoints.map { it.y }.max()!! - orderPoints.map { it.y }.min()!!
-    return orderPoints.map { OrderPoint(it.id, it.x * newAreaWidth/pointsAreaWidth,
-            it.y * newAreaHeight/pointsAreaHeight, it.d, it.r, it.dd, it.s) }
+    val pointsAreaWidth = orderPoints.map { it.x }.let { it.max()!! - it.min()!!}
+    val pointsAreaHeight = orderPoints.map {it.y}.let {it.max()!! - it.min()!!}
+    return orderPoints.map {it.copy(x = it.x * newAreaWidth/pointsAreaWidth,
+            y = it.y * newAreaHeight/pointsAreaHeight)}
 }
 
 fun calculateDistanceMatrixWithNormalizedPoints(orderPoints: List<OrderPoint>, newAreaWidth: Int,
                                                 newAreaHeight: Int) =
         calculateDistanceMatrix(normalizePoints(orderPoints, newAreaWidth, newAreaHeight))
 
-fun calculateDistanceMatrix(orderPoints: List<OrderPoint>) : List<List<Double>>{
-    val distanceMatrix = mutableListOf<MutableList<Double>>()
-    for (i in 0..orderPoints.lastIndex){
-        distanceMatrix.add(mutableListOf<Double>())
-    }
-    for (i in 0..orderPoints.lastIndex){
-        for (j in 0..orderPoints.lastIndex){
-            distanceMatrix[i].add(calculateDistance(orderPoints[i].x to orderPoints[i].y,
-                    orderPoints[j].x to orderPoints[j].y))
+fun calculateDistanceMatrix(orderPoints: List<OrderPoint>): List<List<Double>> =
+        orderPoints.indices.map { i ->
+            orderPoints.indices.map { j ->
+                calculateDistance(orderPoints[i].x to orderPoints[i].y,
+                        orderPoints[j].x to orderPoints[j].y)
+            }
         }
-    }
-    return distanceMatrix
-}
 
-fun calculateDistance(p1: Pair<Int, Int>, p2: Pair<Int, Int>) : Double{
+fun calculateDistance(p1: Pair<Int, Int>, p2: Pair<Int, Int>): Double {
     val xDistance = p1.first - p2.first
     val yDistance = p1.second - p2.second
-    return Math.sqrt((xDistance * xDistance + yDistance * yDistance).toDouble())
+    return Math.sqrt((xDistance.square() + yDistance.square()).toDouble())
 }
+
+fun Int.square() = this * this
 
 private operator fun <E> List<E>.component6() = this[5]
 
