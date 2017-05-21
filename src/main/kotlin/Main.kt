@@ -4,7 +4,7 @@ import java.io.File
  * Created by Евгения on 19.05.2017.
  */
 
-data class OrderPoint(val id: Int, val x: Int, val y: Int, val d: Int, val r: Int, val dd: Int,
+data class OrderPoint(val id: Int, val x: Double, val y: Double, val d: Int, val r: Int, val dd: Int,
                       val s: Int)
 
 data class CarParameters(val number: Int, val capacity: Int)
@@ -27,29 +27,58 @@ fun main(args: Array<String>) {
     val (number, capacity) = line.split("\\s+".toRegex()).drop(1).map(String::toInt)
     val carParameters = CarParameters(number, capacity)
     val lines = File("datasets/homberger_200_customer_instances/C1_2_1.TXT").readLines().drop(9)
-    val orderPoints = lines.map {
+    var orderPoints = lines.map {
         val (c, x, y, d, r, dd, s) = it.split("\\s+".toRegex()).drop(1).map(String::toInt)
-        OrderPoint(c, x, y, d, r, dd, s)
+        OrderPoint(c, x.toDouble(), y.toDouble(), d, r, dd, s)
     }
     val stock = orderPoints[0]
     val features = mutableListOf<Double>()
+    
     //Estimations
-    features.add(orderPoints.map { Math.abs(it.x.toDouble() - stock.x) }.average())
-    features.add(Math.abs(orderPoints.map { it.x.toDouble() }.average() - stock.x))
-    features.add(orderPoints.map { Math.abs(it.y.toDouble() - stock.y) }.average())
-    features.add(Math.abs(orderPoints.map { it.y.toDouble() }.average() - stock.y))
+    features.add(orderPoints.map { Math.abs(it.x - stock.x) }.average())
+    features.add(Math.abs(orderPoints.map { it.x }.average() - stock.x))
+    features.add(orderPoints.map { Math.abs(it.y - stock.y) }.average())
+    features.add(Math.abs(orderPoints.map { it.y }.average() - stock.y))
     features.add(orderPoints.map { it.d.toDouble() }.average() / carParameters.capacity)
     features.add(orderPoints.map { it.dd.toDouble() - it.r.toDouble() }.average())
+    
     //Node distribution features
     val distanceMatrix = calculateDistanceMatrixWithNormalizedPoints(orderPoints, maxX, maxY)
+    features.add(calculateStandardDeviation(distanceMatrix.flatten()))
+    val (centroidX, centroidY) = calculateCentroid(orderPoints)
+    features.add(centroidX)
+    features.add(centroidY)
+    features.add(calculateAverageDistanceToPoint(orderPoints, Pair(centroidX, centroidY)))
+    features.add(calculateFractionOfDistinctDistances(distanceMatrix))
+    val (pointsRectangularWidth, pointsRectangularHeight) = calculateRectangularAreaOfPoints(
+            orderPoints)
+    features.add(pointsRectangularWidth)
+    features.add(pointsRectangularHeight)
 
     print("hello")
 }
 
+fun calculateFractionOfDistinctDistances(distanceMatrix: List<List<Double>>) = distanceMatrix.
+        flatten().distinctBy{it.toInt()}.size / distanceMatrix.size.square().toDouble()
+
+fun calculateAverageDistanceToPoint(orderPoints: List<OrderPoint>, point: Pair<Double, Double>) =
+    orderPoints.map { it.x to it.y }.sumByDouble { calculateDistance(it, point) } /
+            orderPoints.size
+
+fun calculateCentroid(orderPoints: List<OrderPoint>) = orderPoints.map { it.x }.average() to
+        orderPoints.map { it.y }.average()
+
+fun calculateStandardDeviation(listOfNumbers: List<Double>): Double {
+    val average = listOfNumbers.average()
+    return Math.sqrt(listOfNumbers.map { (it - average).square() }.average())
+}
+
+fun calculateRectangularAreaOfPoints(orderPoints: List<OrderPoint>) = orderPoints.map { it.x }.
+        let { it.max()!! - it.min()!!} to orderPoints.map {it.y}.let {it.max()!! - it.min()!!}
+
 fun normalizePoints(orderPoints: List<OrderPoint>, newAreaWidth: Int, newAreaHeight: Int):
         List<OrderPoint>{
-    val pointsAreaWidth = orderPoints.map { it.x }.let { it.max()!! - it.min()!!}
-    val pointsAreaHeight = orderPoints.map {it.y}.let {it.max()!! - it.min()!!}
+    val (pointsAreaWidth, pointsAreaHeight) = calculateRectangularAreaOfPoints(orderPoints)
     return orderPoints.map {it.copy(x = it.x * newAreaWidth/pointsAreaWidth,
             y = it.y * newAreaHeight/pointsAreaHeight)}
 }
@@ -66,13 +95,14 @@ fun calculateDistanceMatrix(orderPoints: List<OrderPoint>): List<List<Double>> =
             }
         }
 
-fun calculateDistance(p1: Pair<Int, Int>, p2: Pair<Int, Int>): Double {
+fun calculateDistance(p1: Pair<Double, Double>, p2: Pair<Double, Double>): Double {
     val xDistance = p1.first - p2.first
     val yDistance = p1.second - p2.second
-    return Math.sqrt((xDistance.square() + yDistance.square()).toDouble())
+    return Math.sqrt((xDistance.square() + yDistance.square()))
 }
 
 fun Int.square() = this * this
+fun Double.square() = this * this
 
 private operator fun <E> List<E>.component6() = this[5]
 
