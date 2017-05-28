@@ -1,3 +1,6 @@
+import quickml.data.AttributesMap
+import quickml.data.instances.RegressionInstance
+import quickml.supervised.ensembles.randomForest.randomRegressionForest.RandomRegressionForestBuilder
 import java.io.File
 
 /**
@@ -26,14 +29,16 @@ fun main(args: Array<String>) {
     val line = File("datasets/homberger_200_customer_instances/C1_2_1.TXT").readLines()[4]
     val (number, capacity) = line.split("\\s+".toRegex()).drop(1).map(String::toInt)
     val carParameters = CarParameters(number, capacity)
+    val datasetParametersNames = listOf("XCOORD.", "YCOORD.",
+            "DEMAND", "READY TIME", "DUE DATE", "SERVICE TIME")
     val lines = File("datasets/homberger_200_customer_instances/C1_2_1.TXT").readLines().drop(9)
-    var orderPoints = lines.map {
+    val orderPoints = lines.map {
         val (c, x, y, d, r, dd, s) = it.split("\\s+".toRegex()).drop(1).map(String::toInt)
         OrderPoint(c, x.toDouble(), y.toDouble(), d, r, dd, s)
     }
     val stock = orderPoints[0]
     val features = mutableListOf<Double>()
-    
+
     //Estimations
     features.add(orderPoints.map { Math.abs(it.x - stock.x) }.average())
     features.add(Math.abs(orderPoints.map { it.x }.average() - stock.x))
@@ -41,7 +46,7 @@ fun main(args: Array<String>) {
     features.add(Math.abs(orderPoints.map { it.y }.average() - stock.y))
     features.add(orderPoints.map { it.d.toDouble() }.average() / carParameters.capacity)
     features.add(orderPoints.map { it.dd.toDouble() - it.r.toDouble() }.average())
-    
+
     //Node distribution features
     val distanceMatrix = calculateDistanceMatrixWithNormalizedPoints(orderPoints, maxX, maxY)
     features.add(calculateStandardDeviation(distanceMatrix.flatten()))
@@ -54,16 +59,54 @@ fun main(args: Array<String>) {
             orderPoints)
     features.add(pointsRectangularWidth)
     features.add(pointsRectangularHeight)
-
+    val nNNDs = calculateNormalizedNearestNeighbourDistances(distanceMatrix)
+    features.add(calculateVariance(nNNDs))
+    features.add(calculateCoefficientOfVariation(nNNDs))
+    /*val fileText = orderPoints.map {"${it.id} ${it.x} ${it.y}"}.joinToString("\n")
+    val file = File("dataset")
+    file.writeText(fileText)
+    val dat = FileHandler.loadDataset(file, 0, "\n")
+    val clusterer = DensityBasedSpatialClustering(10000000.0, 4)
+    val datasets = clusterer.cluster(dat)
+    val file = File("iris.data")
+    file.writeText(fileText)
+    val dat = FileHandler.loadDataset(file, 0, "\n")
+    val clusterer = DensityBasedSpatialClustering()
+    val datasets = clusterer.cluster(dat)*/
+    predictWithRandomForest(datasetParametersNames, orderPoints)
     print("hello")
+}
+
+fun predictWithRandomForest(parametersNames: List<String>, orderPoints: List<OrderPoint>) {
+    val dataset = orderPoints.map {
+        RegressionInstance(
+                AttributesMap(
+                        parametersNames.zip(listOf(it.x.toInt(), it.y.toInt(), it.d, it.r, it.dd, it.s)).toMap()
+                ),
+                0.34
+        )
+    }
+    val randomForest = RandomRegressionForestBuilder<RegressionInstance>().buildPredictiveModel(dataset)
+    //randomForest.predict()
+}
+
+fun calculateCoefficientOfVariation(listOfNumbers: List<Double>) =
+        calculateStandardDeviation(listOfNumbers) / listOfNumbers.average()
+
+fun calculateNormalizedNearestNeighbourDistances(distanceMatrix: List<List<Double>>) =
+        distanceMatrix.map { it.minBy { it > 0 }!! }
+
+fun calculateVariance(listOfNumbers: List<Double>): Double {
+    val average = listOfNumbers.average()
+    return listOfNumbers.map { (it - average).square() }.average()
 }
 
 fun calculateFractionOfDistinctDistances(distanceMatrix: List<List<Double>>) = distanceMatrix.
         flatten().distinctBy{it.toInt()}.size / distanceMatrix.size.square().toDouble()
 
 fun calculateAverageDistanceToPoint(orderPoints: List<OrderPoint>, point: Pair<Double, Double>) =
-    orderPoints.map { it.x to it.y }.sumByDouble { calculateDistance(it, point) } /
-            orderPoints.size
+        orderPoints.map { it.x to it.y }.sumByDouble { calculateDistance(it, point) } /
+                orderPoints.size
 
 fun calculateCentroid(orderPoints: List<OrderPoint>) = orderPoints.map { it.x }.average() to
         orderPoints.map { it.y }.average()
