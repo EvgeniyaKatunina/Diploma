@@ -1,3 +1,7 @@
+
+import net.sf.javaml.clustering.DensityBasedSpatialClustering
+import net.sf.javaml.core.Dataset
+import net.sf.javaml.tools.data.FileHandler
 import quickml.data.AttributesMap
 import quickml.data.instances.RegressionInstance
 import quickml.supervised.ensembles.randomForest.randomRegressionForest.RandomRegressionForestBuilder
@@ -62,19 +66,20 @@ fun main(args: Array<String>) {
     val nNNDs = calculateNormalizedNearestNeighbourDistances(distanceMatrix)
     features.add(calculateVariance(nNNDs))
     features.add(calculateCoefficientOfVariation(nNNDs))
-    /*val fileText = orderPoints.map {"${it.id} ${it.x} ${it.y}"}.joinToString("\n")
+    val clusters = calculateDbscanClusters(orderPoints)
+    features.add(clusters.size / orderPoints.size.toDouble())
+    features.add(calculateVariance(clusters.map { it.size.toDouble() }))
+    //predictWithRandomForest(datasetParametersNames, orderPoints)
+    print("hello")
+}
+
+fun calculateDbscanClusters(orderPoints: List<OrderPoint>): Array<Dataset>{
+    val fileText = orderPoints.map { "${it.id},${it.x},${it.y}" }.joinToString("\n")
     val file = File("dataset")
     file.writeText(fileText)
-    val dat = FileHandler.loadDataset(file, 0, "\n")
-    val clusterer = DensityBasedSpatialClustering(10000000.0, 4)
-    val datasets = clusterer.cluster(dat)
-    val file = File("iris.data")
-    file.writeText(fileText)
-    val dat = FileHandler.loadDataset(file, 0, "\n")
+    val dat = FileHandler.loadDataset(file, 0, ",")
     val clusterer = DensityBasedSpatialClustering()
-    val datasets = clusterer.cluster(dat)*/
-    predictWithRandomForest(datasetParametersNames, orderPoints)
-    print("hello")
+    return clusterer.cluster(dat)
 }
 
 fun predictWithRandomForest(parametersNames: List<String>, orderPoints: List<OrderPoint>) {
@@ -94,7 +99,7 @@ fun calculateCoefficientOfVariation(listOfNumbers: List<Double>) =
         calculateStandardDeviation(listOfNumbers) / listOfNumbers.average()
 
 fun calculateNormalizedNearestNeighbourDistances(distanceMatrix: List<List<Double>>) =
-        distanceMatrix.map { it.minBy { it > 0 }!! }
+        distanceMatrix.map { it.filter { it != 0.0 }.min()!! }
 
 fun calculateVariance(listOfNumbers: List<Double>): Double {
     val average = listOfNumbers.average()
