@@ -5,6 +5,7 @@ import net.sf.javaml.tools.data.FileHandler
 import quickml.data.AttributesMap
 import quickml.data.instances.RegressionInstance
 import quickml.supervised.ensembles.randomForest.randomRegressionForest.RandomRegressionForestBuilder
+import quickml.supervised.tree.regressionTree.RegressionTreeBuilder
 import java.io.File
 
 /**
@@ -41,35 +42,47 @@ fun main(args: Array<String>) {
         OrderPoint(c, x.toDouble(), y.toDouble(), d, r, dd, s)
     }
     val stock = orderPoints[0]
-    val features = mutableListOf<Double>()
+    val features = mutableMapOf<String, Double>()
 
     //Estimations
-    features.add(orderPoints.map { Math.abs(it.x - stock.x) }.average())
-    features.add(Math.abs(orderPoints.map { it.x }.average() - stock.x))
-    features.add(orderPoints.map { Math.abs(it.y - stock.y) }.average())
-    features.add(Math.abs(orderPoints.map { it.y }.average() - stock.y))
-    features.add(orderPoints.map { it.d.toDouble() }.average() / carParameters.capacity)
-    features.add(orderPoints.map { it.dd.toDouble() - it.r.toDouble() }.average())
+    features.put("meanDistanceFromXCoordToStock", orderPoints.map { Math.abs(it.x - stock.x) }.average())
+    features.put("distanceFromMeanXCoordToStock", Math.abs(orderPoints.map { it.x }.average() - stock.x))
+    features.put("meanDistanceFromYCoordToStock", orderPoints.map { Math.abs(it.y - stock.y) }.average())
+    features.put("distanceFromMeanYCoordToStock", Math.abs(orderPoints.map { it.y }.average() - stock.y))
+    features.put("meanMassPerCapacity", orderPoints.map { it.d.toDouble() }.average() / carParameters.capacity)
+    features.put("meanTimeWindowLength", orderPoints.map { it.dd.toDouble() - it.r.toDouble() }.average())
 
     //Node distribution features
     val distanceMatrix = calculateDistanceMatrixWithNormalizedPoints(orderPoints, maxX, maxY)
-    features.add(calculateStandardDeviation(distanceMatrix.flatten()))
+    features.put("standardDeviation", calculateStandardDeviation(distanceMatrix.flatten()))
     val (centroidX, centroidY) = calculateCentroid(orderPoints)
-    features.add(centroidX)
-    features.add(centroidY)
-    features.add(calculateAverageDistanceToPoint(orderPoints, Pair(centroidX, centroidY)))
-    features.add(calculateFractionOfDistinctDistances(distanceMatrix))
+    features.put("centroidX", centroidX)
+    features.put("centroidY", centroidY)
+    features.put("averageDistanceToCentroid",
+            calculateAverageDistanceToPoint(orderPoints, Pair(centroidX, centroidY)))
+    features.put("fractionOfDistinctDistances",
+            calculateFractionOfDistinctDistances(distanceMatrix))
     val (pointsRectangularWidth, pointsRectangularHeight) = calculateRectangularAreaOfPoints(
             orderPoints)
-    features.add(pointsRectangularWidth)
-    features.add(pointsRectangularHeight)
+    features.put("pointsRectangularWidth", pointsRectangularWidth)
+    features.put("pointsRectangularHeight", pointsRectangularHeight)
     val nNNDs = calculateNormalizedNearestNeighbourDistances(distanceMatrix)
-    features.add(calculateVariance(nNNDs))
-    features.add(calculateCoefficientOfVariation(nNNDs))
+    features.put("nNNDsVariance", calculateVariance(nNNDs))
+    features.put("nNNDsCoefficientOfVariation", calculateCoefficientOfVariation(nNNDs))
     val clusters = calculateDbscanClusters(orderPoints)
-    features.add(clusters.size / orderPoints.size.toDouble())
-    features.add(calculateVariance(clusters.map { it.size.toDouble() }))
-    //predictWithRandomForest(datasetParametersNames, orderPoints)
+    features.put("clustersNumber", clusters.size.toDouble())
+    features.put("clustersNumberToOrderPointsNumberRatio",
+            clusters.size / orderPoints.size.toDouble())
+    features.put("clustersSizeVariance", calculateVariance(clusters.map { it.size.toDouble() }))
+    features.put("distinctDistancesFraction",
+            distanceMatrix.flatten().distinct().size.toDouble() / distanceMatrix.size.square())
+    features.put("orderPointsNumber", orderPoints.size.toDouble() - 1)
+    val (depotX, depotY) = Pair(orderPoints[0].x, orderPoints[0].y)
+    features.put("depotXCoord", depotX)
+    features.put("depotYCoord", depotY)
+    features.put("distanceFromCentroidToDepot", calculateDistance(Pair(centroidX, centroidY), Pair(depotX, depotY)))
+
+    predictWithRandomForest(orderPoints, features)
     print("hello")
 }
 
@@ -82,16 +95,16 @@ fun calculateDbscanClusters(orderPoints: List<OrderPoint>): Array<Dataset>{
     return clusterer.cluster(dat)
 }
 
-fun predictWithRandomForest(parametersNames: List<String>, orderPoints: List<OrderPoint>) {
+fun predictWithRandomForest(orderPoints: List<OrderPoint>, features: Map<String, Double>) {
     val dataset = orderPoints.map {
         RegressionInstance(
                 AttributesMap(
-                        parametersNames.zip(listOf(it.x.toInt(), it.y.toInt(), it.d, it.r, it.dd, it.s)).toMap()
+                        features
                 ),
                 0.34
         )
     }
-    val randomForest = RandomRegressionForestBuilder<RegressionInstance>().buildPredictiveModel(dataset)
+    val randomForest = RandomRegressionForestBuilder<RegressionInstance>(RegressionTreeBuilder<RegressionInstance>()).buildPredictiveModel(dataset)
     //randomForest.predict()
 }
 
