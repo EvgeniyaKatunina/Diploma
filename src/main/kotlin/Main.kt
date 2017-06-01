@@ -28,15 +28,57 @@ fun findXYCharacteristics(f: (List<Int>) -> Int): Pair<Int, Int> =
             f(pairs.map { (x, _) -> x }) to f(pairs.map { (_, y) -> y })
         }
 
+
+val maxXAndMaxY = findXYCharacteristics { it.max()!! }
+val maxX = maxXAndMaxY.first
+val maxY = maxXAndMaxY.second
+
 fun main(args: Array<String>) {
-    val (maxX, maxY) = findXYCharacteristics { it.max()!! }
     val (minX, minY) = findXYCharacteristics { it.min()!! }
-    val line = File("datasets/homberger_200_customer_instances/C1_2_1.TXT").readLines()[4]
+    val timeByFileName = File("benchmarks.res").readLines().map {
+        it.split(" ").let { it[0] to it[1].toDouble() }
+    }.toMap()
+    val filesInGroup = 10
+    val trainingSetFilesInGroup = 7
+    val trainingSetRegex = Regex("(.*)?_[2|4]_[1-$trainingSetFilesInGroup]\\.(.*)")
+    val testingSetRegex = Regex("(.*)?_[2|4]_[${trainingSetFilesInGroup + 1}|9|(10)](.*)")
+    val trainingSetFiles = File("datasets").walkTopDown().toList().filter {
+        it.isFile &&
+                trainingSetRegex in it.name
+    }
+    val testingSetFiles = File("datasets").walkTopDown().toList().filter {
+        it.isFile &&
+                testingSetRegex in it.name
+    }
+    val trainingSetFeaturesAndTime = mutableListOf<Pair<Map<String, Double>, Double>>()
+    val testingSetFeatures = mutableListOf<Pair<Map<String, Double>, String>>()
+    for (file in trainingSetFiles) {
+        val time = timeByFileName[file.nameWithoutExtension.toLowerCase()]
+        if (time != null) {
+            val features = extractFeatures(file)
+
+            println("training on ${file.nameWithoutExtension.toLowerCase()}")
+            trainingSetFeaturesAndTime.add(Pair(features, time))
+        }
+    }
+    for (file in testingSetFiles) {
+        val time = timeByFileName[file.nameWithoutExtension.toLowerCase()]
+        if (time != null) {
+            val features = extractFeatures(file)
+            testingSetFeatures.add(Pair(features, file.name))
+        }
+    }
+    predictWithRandomForest(trainingSetFeaturesAndTime, testingSetFeatures, timeByFileName)
+    print("hello")
+}
+
+fun extractFeatures(file: File): Map<String, Double>{
+    val line = file.readLines()[4]
     val (number, capacity) = line.split("\\s+".toRegex()).drop(1).map(String::toInt)
     val carParameters = CarParameters(number, capacity)
-    val datasetParametersNames = listOf("XCOORD.", "YCOORD.",
-            "DEMAND", "READY TIME", "DUE DATE", "SERVICE TIME")
-    val lines = File("datasets/homberger_200_customer_instances/C1_2_1.TXT").readLines().drop(9)
+    val datasetParametersNames = listOf("XCOORD.", "YCOORD.", "DEMAND", "READY TIME",
+            "DUE DATE", "SERVICE TIME")
+    val lines = file.readLines().drop(9)
     val orderPoints = lines.map {
         val (c, x, y, d, r, dd, s) = it.split("\\s+".toRegex()).drop(1).map(String::toInt)
         OrderPoint(c, x.toDouble(), y.toDouble(), d, r, dd, s)
@@ -45,12 +87,18 @@ fun main(args: Array<String>) {
     val features = mutableMapOf<String, Double>()
 
     //Estimations
-    features.put("meanDistanceFromXCoordToStock", orderPoints.map { Math.abs(it.x - stock.x) }.average())
-    features.put("distanceFromMeanXCoordToStock", Math.abs(orderPoints.map { it.x }.average() - stock.x))
-    features.put("meanDistanceFromYCoordToStock", orderPoints.map { Math.abs(it.y - stock.y) }.average())
-    features.put("distanceFromMeanYCoordToStock", Math.abs(orderPoints.map { it.y }.average() - stock.y))
-    features.put("meanMassPerCapacity", orderPoints.map { it.d.toDouble() }.average() / carParameters.capacity)
-    features.put("meanTimeWindowLength", orderPoints.map { it.dd.toDouble() - it.r.toDouble() }.average())
+    features.put("meanDistanceFromXCoordToStock",
+            orderPoints.map { Math.abs(it.x - stock.x) }.average())
+    features.put("distanceFromMeanXCoordToStock",
+            Math.abs(orderPoints.map { it.x }.average() - stock.x))
+    features.put("meanDistanceFromYCoordToStock",
+            orderPoints.map { Math.abs(it.y - stock.y) }.average())
+    features.put("distanceFromMeanYCoordToStock",
+            Math.abs(orderPoints.map { it.y }.average() - stock.y))
+    features.put("meanMassPerCapacity",
+            orderPoints.map { it.d.toDouble() }.average() / carParameters.capacity)
+    features.put("meanTimeWindowLength",
+            orderPoints.map { it.dd.toDouble() - it.r.toDouble() }.average())
 
     //Node distribution features
     val distanceMatrix = calculateDistanceMatrixWithNormalizedPoints(orderPoints, maxX, maxY)
@@ -80,10 +128,9 @@ fun main(args: Array<String>) {
     val (depotX, depotY) = Pair(orderPoints[0].x, orderPoints[0].y)
     features.put("depotXCoord", depotX)
     features.put("depotYCoord", depotY)
-    features.put("distanceFromCentroidToDepot", calculateDistance(Pair(centroidX, centroidY), Pair(depotX, depotY)))
-
-    predictWithRandomForest(orderPoints, features)
-    print("hello")
+    features.put("distanceFromCentroidToDepot", calculateDistance(Pair(centroidX, centroidY),
+            Pair(depotX, depotY)))
+    return features
 }
 
 fun calculateDbscanClusters(orderPoints: List<OrderPoint>): Array<Dataset>{
@@ -95,17 +142,21 @@ fun calculateDbscanClusters(orderPoints: List<OrderPoint>): Array<Dataset>{
     return clusterer.cluster(dat)
 }
 
-fun predictWithRandomForest(orderPoints: List<OrderPoint>, features: Map<String, Double>) {
-    val dataset = orderPoints.map {
+fun predictWithRandomForest(trainingSetFeaturesAndTime: List<Pair<Map<String, Double>, Double>>,
+                            testingSetFeatures: List<Pair<Map<String, Double>, String>>,
+                            timeByName: Map<String, Double>) {
+    val dataset = trainingSetFeaturesAndTime.map {
         RegressionInstance(
                 AttributesMap(
-                        features
+                        it.first
                 ),
-                0.34
+                it.second
         )
     }
-    val randomForest = RandomRegressionForestBuilder<RegressionInstance>(RegressionTreeBuilder<RegressionInstance>()).buildPredictiveModel(dataset)
-    //randomForest.predict()
+    val randomForest = RandomRegressionForestBuilder<RegressionInstance>(
+            RegressionTreeBuilder<RegressionInstance>()).buildPredictiveModel(dataset)
+    testingSetFeatures.map { println("${randomForest.predict(AttributesMap(it.first))} for" +
+            " ${it.second}.") }
 }
 
 fun calculateCoefficientOfVariation(listOfNumbers: List<Double>) =
