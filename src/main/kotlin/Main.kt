@@ -1,4 +1,3 @@
-
 import net.sf.javaml.clustering.DensityBasedSpatialClustering
 import net.sf.javaml.core.Dataset
 import net.sf.javaml.tools.data.FileHandler
@@ -35,13 +34,13 @@ val maxY = maxXAndMaxY.second
 
 fun main(args: Array<String>) {
     val (minX, minY) = findXYCharacteristics { it.min()!! }
-    val timeByFileName = File("benchmarks.res").readLines().map {
+    val timeByFileName = File("benchmarks.res").readLines().map {                       
         it.split(" ").let { it[0] to it[1].toDouble() }
     }.toMap()
     val filesInGroup = 10
     val trainingSetFilesInGroup = 7
-    val trainingSetRegex = Regex("(.*)?_[2|4]_[1-$trainingSetFilesInGroup]\\.(.*)")
-    val testingSetRegex = Regex("(.*)?_[2|4]_[${trainingSetFilesInGroup + 1}|9|(10)](.*)")
+    val trainingSetRegex = Regex("(.*)?_10_[1-$trainingSetFilesInGroup]\\.(.*)")
+    val testingSetRegex = Regex("(.*)?_10_[${trainingSetFilesInGroup + 1}|9|(10)](.*)")
     val trainingSetFiles = File("datasets").walkTopDown().toList().filter {
         it.isFile &&
                 trainingSetRegex in it.name
@@ -117,11 +116,6 @@ fun extractFeatures(file: File): Map<String, Double>{
     val nNNDs = calculateNormalizedNearestNeighbourDistances(distanceMatrix)
     features.put("nNNDsVariance", calculateVariance(nNNDs))
     features.put("nNNDsCoefficientOfVariation", calculateCoefficientOfVariation(nNNDs))
-    val clusters = calculateDbscanClusters(orderPoints)
-    features.put("clustersNumber", clusters.size.toDouble())
-    features.put("clustersNumberToOrderPointsNumberRatio",
-            clusters.size / orderPoints.size.toDouble())
-    features.put("clustersSizeVariance", calculateVariance(clusters.map { it.size.toDouble() }))
     features.put("distinctDistancesFraction",
             distanceMatrix.flatten().distinct().size.toDouble() / distanceMatrix.size.square())
     features.put("orderPointsNumber", orderPoints.size.toDouble() - 1)
