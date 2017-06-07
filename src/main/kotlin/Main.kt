@@ -1,3 +1,4 @@
+
 import net.sf.javaml.clustering.DensityBasedSpatialClustering
 import net.sf.javaml.core.Dataset
 import net.sf.javaml.tools.data.FileHandler
@@ -5,7 +6,10 @@ import quickml.data.AttributesMap
 import quickml.data.instances.RegressionInstance
 import quickml.supervised.ensembles.randomForest.randomRegressionForest.RandomRegressionForestBuilder
 import quickml.supervised.tree.regressionTree.RegressionTreeBuilder
+import weka.core.Instances
+import java.io.BufferedReader
 import java.io.File
+import java.io.FileReader
 
 /**
  * Created by Евгения on 19.05.2017.
@@ -39,8 +43,8 @@ fun main(args: Array<String>) {
     }.toMap()
     val filesInGroup = 10
     val trainingSetFilesInGroup = 7
-    val trainingSetRegex = Regex("(.*)?_10_[1-$trainingSetFilesInGroup]\\.(.*)")
-    val testingSetRegex = Regex("(.*)?_10_[${trainingSetFilesInGroup + 1}|9|(10)](.*)")
+    val trainingSetRegex = Regex("(.*)?_[2|4|6|8|(10)]_[1-$trainingSetFilesInGroup]\\.(.*)")
+    val testingSetRegex = Regex("(.*)?_[2|4|6|8|(10)]_[${trainingSetFilesInGroup + 1}|9|(10)](.*)")
     val trainingSetFiles = File("datasets").walkTopDown().toList().filter {
         it.isFile &&
                 trainingSetRegex in it.name
@@ -67,7 +71,9 @@ fun main(args: Array<String>) {
             testingSetFeatures.add(Pair(features, file.name))
         }
     }
-    predictWithRandomForest(trainingSetFeaturesAndTime, testingSetFeatures, timeByFileName)
+    //predictWithRandomForest(trainingSetFeaturesAndTime, testingSetFeatures, timeByFileName)
+    predictWithLinearRegression(trainingSetFeaturesAndTime, testingSetFeatures,
+            extractFeatures(trainingSetFiles[0]))
     print("hello")
 }
 
@@ -137,8 +143,7 @@ fun calculateDbscanClusters(orderPoints: List<OrderPoint>): Array<Dataset>{
 }
 
 fun predictWithRandomForest(trainingSetFeaturesAndTime: List<Pair<Map<String, Double>, Double>>,
-                            testingSetFeatures: List<Pair<Map<String, Double>, String>>,
-                            timeByName: Map<String, Double>) {
+                            testingSetFeatures: List<Pair<Map<String, Double>, String>>) {
     val dataset = trainingSetFeaturesAndTime.map {
         RegressionInstance(
                 AttributesMap(
@@ -151,6 +156,34 @@ fun predictWithRandomForest(trainingSetFeaturesAndTime: List<Pair<Map<String, Do
             RegressionTreeBuilder<RegressionInstance>()).buildPredictiveModel(dataset)
     testingSetFeatures.map { println("${randomForest.predict(AttributesMap(it.first))} for" +
             " ${it.second}.") }
+}
+
+fun predictWithLinearRegression(trainingSetFeaturesAndTime: List<Pair<Map<String, Double>, Double>>,
+                                testingSetFeatures: List<Pair<Map<String, Double>, String>>,
+                                features: Map<String, Double>) {
+    val datasetWriter = File("dataset.arff").printWriter()
+    datasetWriter.println("@RELATION map")
+    features.keys.map { datasetWriter.println("@ATTRIBUTE $it NUMERIC") }
+    datasetWriter.println("@ATTRIBUTE time NUMERIC")
+    datasetWriter.println("@DATA")
+    trainingSetFeaturesAndTime.map {
+        it.first.values.map { datasetWriter.print("$it,") }
+        datasetWriter.println(it.second)
+    }
+    testingSetFeatures.map {
+        it.first.values.map { datasetWriter.print("$it,") }
+        datasetWriter.println("?")
+    }
+    datasetWriter.close()
+    val data = Instances(BufferedReader(FileReader("dataset.arff")))
+    data.setClassIndex(data.numAttributes() - 1)
+    val model = weka.classifiers.functions.LinearRegression()
+    model.buildClassifier(data)
+    println(model)
+    val trainingSetSize = trainingSetFeaturesAndTime.size
+    testingSetFeatures.mapIndexed { index, pair ->
+        println("${model.classifyInstance(data.instance(trainingSetSize + index))} for ${pair.second}.")
+    }
 }
 
 fun calculateCoefficientOfVariation(listOfNumbers: List<Double>) =
