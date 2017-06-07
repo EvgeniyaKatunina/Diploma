@@ -1,4 +1,3 @@
-
 import net.sf.javaml.clustering.DensityBasedSpatialClustering
 import net.sf.javaml.core.Dataset
 import net.sf.javaml.tools.data.FileHandler
@@ -161,6 +160,19 @@ fun predictWithRandomForest(trainingSetFeaturesAndTime: List<Pair<Map<String, Do
 fun predictWithLinearRegression(trainingSetFeaturesAndTime: List<Pair<Map<String, Double>, Double>>,
                                 testingSetFeatures: List<Pair<Map<String, Double>, String>>,
                                 features: Map<String, Double>) {
+    val data = createDataForWeka(trainingSetFeaturesAndTime, testingSetFeatures, features)
+    val model = weka.classifiers.functions.LinearRegression()
+    model.buildClassifier(data)
+    println(model)
+    val trainingSetSize = trainingSetFeaturesAndTime.size
+    testingSetFeatures.mapIndexed { index, pair ->
+        println("${model.classifyInstance(data.instance(trainingSetSize + index))} for ${pair.second}.")
+    }
+}
+
+fun createDataForWeka(trainingSetFeaturesAndTime: List<Pair<Map<String, Double>, Double>>,
+                      testingSetFeatures: List<Pair<Map<String, Double>, String>>,
+                      features: Map<String, Double>) : Instances{
     val datasetWriter = File("dataset.arff").printWriter()
     datasetWriter.println("@RELATION map")
     features.keys.map { datasetWriter.println("@ATTRIBUTE $it NUMERIC") }
@@ -177,13 +189,11 @@ fun predictWithLinearRegression(trainingSetFeaturesAndTime: List<Pair<Map<String
     datasetWriter.close()
     val data = Instances(BufferedReader(FileReader("dataset.arff")))
     data.setClassIndex(data.numAttributes() - 1)
-    val model = weka.classifiers.functions.LinearRegression()
-    model.buildClassifier(data)
-    println(model)
-    val trainingSetSize = trainingSetFeaturesAndTime.size
-    testingSetFeatures.mapIndexed { index, pair ->
-        println("${model.classifyInstance(data.instance(trainingSetSize + index))} for ${pair.second}.")
-    }
+    return data
+}
+
+fun predictWithMultilayerPerceptron(){
+    
 }
 
 fun calculateCoefficientOfVariation(listOfNumbers: List<Double>) =
