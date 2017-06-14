@@ -19,51 +19,74 @@ fun readDataFromBin(file: File): List<DataItem> =
         }
 
 fun runLinearRegression(data: List<DataItem>) {
-    val trainLinearRegression: (List<DataItem>, Unit) -> LinearRegression = { l, _ ->
-        val result = trainLinearRegression(l)
+    val trainLinearRegression: (List<DataItem>, Double) -> LinearRegression = { l, ridge ->
+        val result = trainLinearRegression(l, ridge)
         println(result)
         result
     }
 
-    val linearRegressionResult = kFoldCrossValidate(listOf(Unit), data, trainLinearRegression, { solver, testData ->
-        rmse(testData, testData.map { it.value!! }) { solver.classifyInstance(it.toWekaInstanceNoValue()) }
-    }).second
+    val ridgeValues = listOf(287.0)
+
+    val (bestRidge, linearRegressionResult) = leaveOneOut(ridgeValues, data, trainLinearRegression, { solver, testData ->
+        -1 * rmseRelative(testData, testData.map { it.value!! }) { solver.classifyInstance(it.toWekaInstanceNoValue()) }
+    })
+
+    println("Best ridge: $bestRidge")
     println("Linear regression RMSE: $linearRegressionResult")
 }
 
 fun runRandomForest(data: List<DataItem>) {
     val trainRandomForest: (List<DataItem>, Unit) -> RandomRegressionForest = { l, _ -> trainRandomForest(l) }
 
-    val randomForestResult = kFoldCrossValidate(listOf(Unit), data, trainRandomForest, { solver, testData ->
-        rmse(testData, testData.map { it.value!! }) { solver.predict(it.toAttributesMap()) }
+    val randomForestResult = leaveOneOut(listOf(Unit), data, trainRandomForest, { solver, testData ->
+        rmseRelative(testData, testData.map { it.value!! }) { solver.predict(it.toAttributesMap()) }
     })
     println("Random forest RMSE: ${randomForestResult.second}")
 }
 
 fun runNeuralNetwork(data: List<DataItem>) {
-    val inputNormalizers = data[0].features.keys.associate { f -> f to normalizer(data.map { it.features[f]!! }) }
+    val inputNormalizers = data[0].features.keys.associate { f ->
+        f to normalizer(data.map { it.features[f]!! })
+    }
     val outputNormalizer = normalizer(data.map { it.value!! }.toDoubleArray())
-    val trainNeuralNetwork: (List<DataItem>, Unit) -> MultiLayerNetwork = { l, _ -> trainNeuralNetwork(l, inputNormalizers, outputNormalizer) }
 
-    val neuralNetworkResult = kFoldCrossValidate(listOf(Unit), data, trainNeuralNetwork, { solver, testData ->
-        rmse(testData, testData.map { outputNormalizer(it.value!!) }) { solver.output(it.toIndArray(inputNormalizers), false).getDouble(0, 0) }
-    })
-    val normalizedRmse = neuralNetworkResult.second
+    val trainNeuralNetwork: (List<DataItem>, Int) -> MultiLayerNetwork =
+            { l, neuronsNumber -> trainNeuralNetwork(l, inputNormalizers, outputNormalizer,
+                    neuronsNumber) }
+
     val outMax = data.map { it.value!! }.max()!!
     val outMin = data.map { it.value!! }.min()!!
-    println("Neural network RMSE: ${normalizedRmse * (outMax - outMin) + outMin}")
+    fun denormalizeOutput(d: Double) = d * (outMax - outMin) + outMin
+
+    val neuronsNumbers = (0..5).map {5 + it * 2}
+
+    val (bestNeuronsNumber ,neuralNetworkResult) = kFoldCrossValidate(neuronsNumbers, data, trainNeuralNetwork, { solver, testData ->
+        rmseRelative(testData, testData.map { it.value!! }) {
+            denormalizeOutput(solver.output(it.toIndArray(inputNormalizers), false).getDouble(0, 0))
+        }
+    })
+    val normalizedRmse = neuralNetworkResult
+    println("Best neurons number: $bestNeuronsNumber")
+    println("Neural network RMSE: $normalizedRmse")
 }
 
 fun main(args: Array<String>) {
     println("Reading data")
-    val fullData = if (File("data.bin").exists()) readDataFromBin(File("data.bin")) else File("datasets").walk()
+    val fullData = if (File("data.bin").exists()) readDataFromBin(File("data.bin"))
+    else File("datasets").walk()
             .filter { it.isFile }
             .toList()
-            .mapNotNull { DataItem(extractFeatures(it), (timeByFileName[it.nameWithoutExtension.toLowerCase()] ?: return@mapNotNull null)) }
+            .mapNotNull {
+                DataItem(extractFeatures(it),
+                        (timeByFileName[it.nameWithoutExtension.toLowerCase()] ?: return@mapNotNull null))
+            }
             .also { serializeDataToBin(it, File("data.bin")) }
     println("Data read")
 
+    val npointsToData = fullData.groupBy { it.features["orderPointsNumber"] }
+    
+
     runNeuralNetwork(fullData)
-    runLinearRegression(fullData)
-    runRandomForest(fullData)
+//    runRandomForest(fullData)
+//    runLinearRegression(fullData)
 }

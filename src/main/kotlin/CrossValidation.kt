@@ -1,5 +1,12 @@
 private val DEFAULT_K_FOLD = 7
 
+fun <Data, Solver, Param : Any> leaveOneOut(
+        params: Iterable<Param>,
+        data: List<Data>,
+        learn: (dataSet: List<Data>, param: Param) -> Solver,
+        validate: (solver: Solver, dataSet: List<Data>) -> Double
+): Pair<Param, Double> = kFoldCrossValidate(params, data, learn, validate, data.size)
+
 fun <Data, Solver, Param : Any> kFoldCrossValidate(
         params: Iterable<Param>,
         data: List<Data>,

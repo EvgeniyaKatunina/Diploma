@@ -18,7 +18,8 @@ fun normalizer(min: Double, max: Double): (Double) -> Double = { (it - min) / (m
 
 fun trainNeuralNetwork(trainData: List<DataItem>,
                        inputNormalizers: Map<String, (Double) -> Double>,
-                       outputNormalizer: (Double) -> Double
+                       outputNormalizer: (Double) -> Double,
+                       neuronsNumber: Int
                        ): MultiLayerNetwork {
     val nFeatures = trainData[0].features.size
 
@@ -36,7 +37,7 @@ fun trainNeuralNetwork(trainData: List<DataItem>,
     val seed = 12345
     val learningRate = 0.01
 
-    val numHiddenNodes = 10
+    val numHiddenNodes = neuronsNumber
     val config = NeuralNetConfiguration.Builder()
             .seed(seed)
             .iterations(1)

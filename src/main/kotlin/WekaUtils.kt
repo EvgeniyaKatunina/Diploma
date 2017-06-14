@@ -1,5 +1,6 @@
 
 import weka.classifiers.functions.LinearRegression
+import weka.classifiers.meta.CVParameterSelection
 import weka.core.Attribute
 import weka.core.Instances
 import java.nio.file.Files
@@ -22,15 +23,24 @@ fun createDataForWeka(trainingSetFeaturesAndTime: List<DataItem>): Instances {
     return data
 }
 
-fun trainLinearRegression(trainingSetFeaturesAndTime: List<DataItem>): LinearRegression {
+fun findParametersForLinearRegression(trainingSetFeaturesAndTime: List<DataItem>): CVParameterSelection{
     val data = createDataForWeka(trainingSetFeaturesAndTime)
-    val model = weka.classifiers.functions.LinearRegression()
+    val model = weka.classifiers.meta.CVParameterSelection()
     model.buildClassifier(data)
     return model
 }
 
-fun DataItem.toWekaInstanceNoValue() = weka.core.Instance(features.size + 1).apply {
+fun trainLinearRegression(trainingSetFeaturesAndTime: List<DataItem>, ridge: Double): LinearRegression {
+    val data = createDataForWeka(trainingSetFeaturesAndTime)
+    val model = weka.classifiers.functions.LinearRegression()
+    model.ridge = ridge
+    model.buildClassifier(data)
+    return model
+}
+
+fun DataItem.toWekaInstanceNoValue() = weka.core.DenseInstance(features.size + 1).apply {
     var i = 0
-    for ((k, v) in features + ("answer" to 0.0))
+    for ((k, v) in features + ("answer" to 0.0)) {
         setValue(Attribute(k, i++), v)
+    }
 }

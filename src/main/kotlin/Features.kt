@@ -1,6 +1,3 @@
-import net.sf.javaml.clustering.DensityBasedSpatialClustering
-import net.sf.javaml.core.Dataset
-import net.sf.javaml.tools.data.FileHandler
 import java.io.File
 
 fun extractFeatures(file: File): Map<String, Double>{
@@ -98,16 +95,6 @@ fun normalizePoints(orderPoints: List<OrderPoint>, newAreaWidth: Int, newAreaHei
 fun calculateDistanceMatrixWithNormalizedPoints(orderPoints: List<OrderPoint>, newAreaWidth: Int,
                                                 newAreaHeight: Int) =
         calculateDistanceMatrix(normalizePoints(orderPoints, newAreaWidth, newAreaHeight))
-
-
-fun calculateDbscanClusters(orderPoints: List<OrderPoint>): Array<Dataset>{
-    val fileText = orderPoints.map { "${it.id},${it.x},${it.y}" }.joinToString("\n")
-    val file = File("dataset")
-    file.writeText(fileText)
-    val dat = FileHandler.loadDataset(file, 0, ",")
-    val clusterer = DensityBasedSpatialClustering()
-    return clusterer.cluster(dat)
-}
 
 private operator fun <E> List<E>.component6() = this[5]
 private operator fun <E> List<E>.component7() = this[6]
