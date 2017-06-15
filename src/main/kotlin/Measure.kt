@@ -10,14 +10,14 @@ fun <T> maxDeviation(data: List<T>,
                      estimator: (T) -> Double) =
         data.map(estimator).zip(expected) { a, b ->
             Math.abs(a - b)
-        }.max()
+        }.max()!!
 
 fun <T> minDeviation(data: List<T>,
                      expected: List<Double>,
                      estimator: (T) -> Double) =
         data.map(estimator).zip(expected) { a, b ->
             Math.abs(a - b)
-        }.min()
+        }.min()!!
 
 fun <T> meanDeviation(data: List<T>,
                      expected: List<Double>,
